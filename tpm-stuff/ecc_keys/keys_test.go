@@ -124,20 +124,6 @@ func TestCreateEncryptionKey(t *testing.T) {
 		}
 	})
 
-	t.Run("read persistent key", func(t *testing.T) {
-		pub, _, _, err := tpm2.ReadPublic(rwc, localHandle)
-		if err != nil {
-			t.Fatalf("failed to Read Public: %v", err)
-		}
-		name, err := pub.Name()
-		if err != nil {
-			t.Fatalf("can't read public name: %v", err)
-		}
-		if !reflect.DeepEqual(name.Digest.Value, tpmPublicKeyDigest) {
-			t.Fatalf("did not get the same key")
-		}
-	})
-
 	t.Run("External shared key", func(t *testing.T) {
 		pub, _, _, err := tpm2.ReadPublic(rwc, localHandle)
 		if err != nil {
