@@ -34,27 +34,12 @@ var (
 		},
 	}
 
-	rsaKeyParamsSigner = tpm2.Public{
-		Type:       tpm2.AlgRSA,
-		NameAlg:    tpm2.AlgSHA256,
-		Attributes: tpm2.FlagSignerDefault & ^tpm2.FlagRestricted,
-		AuthPolicy: []byte{},
-		RSAParameters: &tpm2.RSAParams{
-			Sign: &tpm2.SigScheme{
-				Alg:  tpm2.AlgRSASSA,
-				Hash: tpm2.AlgSHA256,
-			},
-			KeyBits: 2048,
-		},
-	}
-
 	// This uses RSA/ES
 	// TODO: Add test with RSA/AOEP stuff
 	rsaKeyParamsDecrypt = tpm2.Public{
 		Type:       tpm2.AlgRSA,
 		NameAlg:    tpm2.AlgSHA256,
 		Attributes: tpm2.FlagStorageDefault & ^tpm2.FlagRestricted,
-		AuthPolicy: []byte{},
 		RSAParameters: &tpm2.RSAParams{
 			Sign:       &tpm2.SigScheme{},
 			KeyBits:    2048,
@@ -63,7 +48,7 @@ var (
 	}
 )
 
-func TestCreateKey(t *testing.T) {
+func TestCreateEncryptionKey(t *testing.T) {
 	var sealedHandle tpmutil.Handle
 	var tpmPublicKeyDigest tpmutil.U16Bytes
 	tpm := swtpm_test.NewSwtpm(t.TempDir())
