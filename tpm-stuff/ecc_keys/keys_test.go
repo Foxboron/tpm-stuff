@@ -1,21 +1,25 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
-	"fmt"
+	"io"
 	"reflect"
 	"testing"
 
 	"github.com/foxboron/swtpm_test"
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpmutil"
+	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/crypto/hkdf"
 )
 
 var (
+	p256Label = "age-encryption.org/v1/tpm-p256"
 
 	// Default SRK handle
 	srkHandle tpmutil.Handle = 0x81000001
@@ -154,24 +158,74 @@ func TestCreateEncryptionKey(t *testing.T) {
 			t.Fatalf("can't run ecdh with TPM key")
 		}
 		shared = sha256.Sum256(b)
-
-		fmt.Printf("\nShared key (External) %x\n", shared)
 	})
 
 	t.Run("TPM create shared key", func(t *testing.T) {
 		x, y := elliptic.Unmarshal(elliptic.P256(), externalPubKey.Bytes())
-		p := tpm2.ECPoint{XRaw: x.Bytes(), YRaw: y.Bytes()}
-
-		z, err := tpm2.ECDHZGen(rwc, localHandle, "", p)
+		z, err := tpm2.ECDHZGen(rwc, localHandle, "",
+			tpm2.ECPoint{XRaw: x.Bytes(), YRaw: y.Bytes()})
 		if err != nil {
 			t.Fatalf("failed ECDHZGen: %v", err)
 		}
-
 		tpmSharedKey := sha256.Sum256(z.X().Bytes())
-		fmt.Printf("\nShared key (TPM) %x\n", tpmSharedKey)
-		fmt.Printf("\nShared key (External) %x\n", shared)
+
 		if tpmSharedKey != shared {
 			t.Fatalf("shared key is not the same")
+		}
+	})
+
+	// The rest of this code is chacha20 as done by age
+	// Just copypasta to ensure it works in context
+	// We could move the hkdf into the TPM probably?
+	secret := []byte("This is a secret")
+	var sealed []byte
+
+	t.Run("Encrypt secret with shared key", func(t *testing.T) {
+
+		// It should also include the public key from the TPM, but not doing the dance in this function again
+		extpub := externalPubKey.Bytes()
+
+		salt := make([]byte, 0, len(extpub))
+		salt = append(salt, extpub...)
+		h := hkdf.New(sha256.New, shared[:], salt, []byte(p256Label))
+		wrappingKey := make([]byte, chacha20poly1305.KeySize)
+		if _, err := io.ReadFull(h, wrappingKey); err != nil {
+			t.Fatalf("Can't read full")
+		}
+
+		aead, err := chacha20poly1305.New(wrappingKey)
+		if err != nil {
+			t.Fatalf("can't encrypt with chacha20")
+		}
+		nonce := make([]byte, chacha20poly1305.NonceSize)
+		sealed = aead.Seal(nil, nonce, secret, nil)
+	})
+
+	t.Run("Decrypt secret with shared key", func(t *testing.T) {
+
+		// It should also include the public key from the TPM, but not doing the dance in this function again
+		extpub := externalPubKey.Bytes()
+
+		salt := make([]byte, 0, len(extpub))
+		salt = append(salt, extpub...)
+		h := hkdf.New(sha256.New, shared[:], salt, []byte(p256Label))
+		wrappingKey := make([]byte, chacha20poly1305.KeySize)
+		if _, err := io.ReadFull(h, wrappingKey); err != nil {
+			t.Fatalf("Can't read full")
+		}
+
+		aead, err := chacha20poly1305.New(wrappingKey)
+		if err != nil {
+			t.Fatalf("can't encrypt with chacha20")
+		}
+		nonce := make([]byte, chacha20poly1305.NonceSize)
+
+		decrypted, err := aead.Open(nil, nonce, sealed, nil)
+		if err != nil {
+			t.Fatalf("failed to decrypt")
+		}
+		if !bytes.Equal(secret, decrypted) {
+			t.Fatalf("Not the same message")
 		}
 	})
 }
