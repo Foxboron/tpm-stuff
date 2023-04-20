@@ -3,9 +3,9 @@ package main
 import (
 	"crypto/ecdh"
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/x509"
 	"fmt"
 	"reflect"
 	"testing"
@@ -159,16 +159,8 @@ func TestCreateEncryptionKey(t *testing.T) {
 	})
 
 	t.Run("TPM create shared key", func(t *testing.T) {
-		marshaled, err := x509.MarshalPKIXPublicKey(externalPubKey)
-		if err != nil {
-			t.Fatalf("ParsePKIXPublicKey: %v", err)
-		}
-		k, err := x509.ParsePKIXPublicKey(marshaled)
-		if err != nil {
-			t.Fatalf("ParsePKIXPublicKey: %v", err)
-		}
-		extPubKey := k.(*ecdsa.PublicKey)
-		p := tpm2.ECPoint{XRaw: extPubKey.X.Bytes(), YRaw: extPubKey.Y.Bytes()}
+		x, y := elliptic.Unmarshal(elliptic.P256(), externalPubKey.Bytes())
+		p := tpm2.ECPoint{XRaw: x.Bytes(), YRaw: y.Bytes()}
 
 		z, err := tpm2.ECDHZGen(rwc, localHandle, "", p)
 		if err != nil {
