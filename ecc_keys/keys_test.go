@@ -173,6 +173,8 @@ func TestCreateEncryptionKey(t *testing.T) {
 
 		salt := make([]byte, 0, len(extpub))
 		salt = append(salt, extpub...)
+
+		tpm2.KDFe()
 		h := hkdf.New(sha256.New, shared[:], salt, []byte(p256Label))
 		wrappingKey := make([]byte, chacha20poly1305.KeySize)
 		if _, err := io.ReadFull(h, wrappingKey); err != nil {
